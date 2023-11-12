@@ -22,11 +22,52 @@
 
 /* USER CODE BEGIN 0 */
 
+#if 0
+/* Debug Exception and Monitor Control Register base address */
+#define DEMCR                 *((volatile uint32_t *)0xE000EDFCU)
+/* ITM register addresses */
+#define ITM_STIMULUS_PORT0    *((volatile uint32_t *)0xE0000000)
+#define ITM_TRACE_EN          *((volatile uint32_t *)0xE0000E00)
+#endif
+
 /* USER CODE END 0 */
 
+UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart3;
 
+/* UART4 init function */
+void MX_UART4_Init(void)
+{
+
+  /* USER CODE BEGIN UART4_Init 0 */
+
+  /* USER CODE END UART4_Init 0 */
+
+  /* USER CODE BEGIN UART4_Init 1 */
+
+  /* USER CODE END UART4_Init 1 */
+  huart4.Instance = UART4;
+  huart4.Init.BaudRate = 115200;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart4.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart4.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_TXINVERT_INIT|UART_ADVFEATURE_RXINVERT_INIT;
+  huart4.AdvancedInit.TxPinLevelInvert = UART_ADVFEATURE_TXINV_ENABLE;
+  huart4.AdvancedInit.RxPinLevelInvert = UART_ADVFEATURE_RXINV_ENABLE;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART4_Init 2 */
+
+  /* USER CODE END UART4_Init 2 */
+
+}
 /* USART1 init function */
 
 void MX_USART1_UART_Init(void)
@@ -95,7 +136,41 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
-  if(uartHandle->Instance==USART1)
+  if(uartHandle->Instance==UART4)
+  {
+  /* USER CODE BEGIN UART4_MspInit 0 */
+
+  /* USER CODE END UART4_MspInit 0 */
+
+  /** Initializes the peripherals clock
+  */
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_UART4;
+    PeriphClkInit.Uart4ClockSelection = RCC_UART4CLKSOURCE_PCLK1;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+    {
+      Error_Handler();
+    }
+
+    /* UART4 clock enable */
+    __HAL_RCC_UART4_CLK_ENABLE();
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    /**UART4 GPIO Configuration
+    PA0     ------> UART4_TX
+    PA1     ------> UART4_RX
+    */
+    GPIO_InitStruct.Pin = ARD_D1_Pin|ARD_D0_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF8_UART4;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* USER CODE BEGIN UART4_MspInit 1 */
+
+  /* USER CODE END UART4_MspInit 1 */
+  }
+  else if(uartHandle->Instance==USART1)
   {
   /* USER CODE BEGIN USART1_MspInit 0 */
 
@@ -168,7 +243,30 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 {
 
-  if(uartHandle->Instance==USART1)
+  if(uartHandle->Instance==UART4)
+  {
+  /* USER CODE BEGIN UART4_MspDeInit 0 */
+
+    if (HAL_UART_STATE_READY != uartHandle->gState) {
+      HAL_UART_AbortReceive_IT(&huart4);
+      HAL_UART_AbortTransmit_IT(&huart4);
+    }
+
+  /* USER CODE END UART4_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_UART4_CLK_DISABLE();
+
+    /**UART4 GPIO Configuration
+    PA0     ------> UART4_TX
+    PA1     ------> UART4_RX
+    */
+    HAL_GPIO_DeInit(GPIOA, ARD_D1_Pin|ARD_D0_Pin);
+
+  /* USER CODE BEGIN UART4_MspDeInit 1 */
+
+  /* USER CODE END UART4_MspDeInit 1 */
+  }
+  else if(uartHandle->Instance==USART1)
   {
   /* USER CODE BEGIN USART1_MspDeInit 0 */
 
@@ -207,5 +305,51 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
 }
 
 /* USER CODE BEGIN 1 */
+
+#if 0
+/* Implementation of printf like feature using ARM Cortex M3/M4/ ITM functionality
+ * This function will not work for ARM Cortex M0/M0+
+ * If you are using Cortex M0, then you can use semihosting feature of openOCD
+ */
+void ITM_SendChar(uint8_t ch)
+{
+  /* Enable TRCENA */
+  DEMCR |= ( 1 << 24);
+
+  /* Enable stimulus port 0 */
+  ITM_TRACE_EN |= ( 1 << 0);
+
+  /* Read FIFO status in bit [0]: */
+  while(!(ITM_STIMULUS_PORT0 & 1));
+
+  /* Write to ITM stimulus port0 */
+  ITM_STIMULUS_PORT0 = ch;
+}
+
+int _write(int file, char *ptr, int len)
+{
+  (void)file;
+  int dataIdx;
+
+  for (dataIdx = 0; dataIdx < len; dataIdx++)
+  {
+    ITM_SendChar(*ptr++);
+  }
+  return len;
+}
+#endif
+
+bool MX_UART4_Read(int8_t * ptr, size_t len)
+{
+  uint16_t rxlen;
+  (void)HAL_UARTEx_ReceiveToIdle(&huart4, (uint8_t *)ptr, (uint16_t)len, &rxlen, 5000);
+  ptr[rxlen] = 0U;
+  return (rxlen > 0);
+}
+
+bool MX_UART4_Write(int8_t *ptr, size_t len)
+{
+  return (HAL_OK == HAL_UART_Transmit(&huart4, (uint8_t *)ptr, (uint16_t)len, 10));
+}
 
 /* USER CODE END 1 */
