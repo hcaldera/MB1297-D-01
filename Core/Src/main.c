@@ -71,6 +71,9 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 
+  int8_t uart4Bfr[64];
+  const char noResponse[] = "\nNo traffic\n";
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -98,6 +101,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_PCD_Init();
+  MX_UART4_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -109,6 +113,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+    if (MX_UART4_Read(uart4Bfr, sizeof(uart4Bfr))) {
+      MX_UART4_Write(uart4Bfr, strlen((const char *)uart4Bfr));
+    } else {
+      MX_UART4_Write((int8_t *)noResponse, strlen(noResponse));
+    }
   }
   /* USER CODE END 3 */
 }
