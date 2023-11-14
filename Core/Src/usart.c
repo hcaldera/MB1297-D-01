@@ -40,10 +40,10 @@
 #error "UART4_RX_BUFFER_SIZE can't be smaller than UART4_RX_IT_BUFFER_SIZE"
 #endif
 
-static int8_t  uart4_tx_buffer[UART4_TX_BUFFER_SIZE];
+static int8_t  *uart4_tx_buffer = (int8_t *)(SRAM2_BASE + 0x800U);
 static int16_t uart4_tx_in = 0;
 
-static int8_t  uart4_rx_buffer[UART4_RX_BUFFER_SIZE];
+static int8_t  *uart4_rx_buffer = (int8_t *)(SRAM2_BASE + 0x800U + UART4_TX_BUFFER_SIZE);
 static int8_t  uart4_rx_it_buffer[UART4_RX_IT_BUFFER_SIZE];
 static int16_t uart4_rx_in = 0;
 static int16_t uart4_rx_out = 0;
