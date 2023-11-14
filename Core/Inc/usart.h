@@ -48,8 +48,8 @@ void MX_USART3_UART_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
-extern bool MX_UART4_Read(int8_t * ptr, size_t len);
-extern bool MX_UART4_Write(int8_t * ptr, size_t len);
+extern int16_t MX_UART4_Read(int8_t * ptrBfr);
+extern bool MX_UART4_Write(const int8_t *ptrBfr, size_t len);
 
 /* USER CODE END Prototypes */
 
