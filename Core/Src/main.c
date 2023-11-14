@@ -39,6 +39,12 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define MAIN_TICK (50U)
+#define TICKS2MS(x) ((x) * MAIN_TICK)
+#define MS2TICKS(m) (((int32_t)(s) % MAIN_TICK) ? (((int32_t)(s) / MAIN_TICK) + 1) : ((int32_t)(s) / MAIN_TICK))
+
+#define MAIN_BUFFER_SIZE (1 << 10) /* 1024 */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -49,6 +55,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+
+static int8_t main_buffer[MAIN_BUFFER_SIZE];
+static int16_t main_buffer_in = 0;
 
 /* USER CODE END PV */
 
@@ -71,8 +80,10 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 
-  int8_t uart4Bfr[64];
-  const char noResponse[] = "\nNo traffic\n";
+  int16_t ticksCtr1 = 0;
+  int16_t ticksCtr2 = 0;
+
+  int16_t len;
 
   /* USER CODE END 1 */
 
@@ -104,6 +115,8 @@ int main(void)
   MX_UART4_Init();
   /* USER CODE BEGIN 2 */
 
+  MX_UART4_Write((const int8_t *)"Hello World!\n", strlen("Hello World!\n"));
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -114,11 +127,23 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    if (MX_UART4_Read(uart4Bfr, sizeof(uart4Bfr))) {
-      MX_UART4_Write(uart4Bfr, strlen((const char *)uart4Bfr));
-    } else {
-      MX_UART4_Write((int8_t *)noResponse, strlen(noResponse));
+    if (TICKS2MS(ticksCtr1) == 5000) {
+      MX_UART4_Write((const int8_t *)"\nFive seconds elapsed...\n", strlen("\nFive seconds elapsed...\n"));
+
+      ticksCtr1 = 0;
     }
+
+    if (TICKS2MS(ticksCtr2) == 100) {
+      len = MX_UART4_Read(&main_buffer[main_buffer_in]);
+      (void)MX_UART4_Write(&main_buffer[main_buffer_in], len);
+      main_buffer_in = (main_buffer_in + len) & (MAIN_BUFFER_SIZE - 1);
+
+      ticksCtr2 = 0;
+    }
+
+    HAL_Delay(MAIN_TICK);
+    ticksCtr1++;
+    ticksCtr2++;
   }
   /* USER CODE END 3 */
 }

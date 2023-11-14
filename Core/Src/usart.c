@@ -30,6 +30,25 @@
 #define ITM_TRACE_EN          *((volatile uint32_t *)0xE0000E00)
 #endif
 
+#define USART_INC_IDX(i, val, max) ((i) + (val)) & ((max) - 1)
+
+#define UART4_TX_BUFFER_SIZE    (1 << 9)  /* 512  */
+#define UART4_RX_BUFFER_SIZE    (1 << 9)  /* 512  */
+#define UART4_RX_IT_BUFFER_SIZE (1 << 6)  /* 64   */
+
+#if (UART4_RX_BUFFER_SIZE) < (UART4_RX_IT_BUFFER_SIZE)
+#error "UART4_RX_BUFFER_SIZE can't be smaller than UART4_RX_IT_BUFFER_SIZE"
+#endif
+
+static int8_t  uart4_tx_buffer[UART4_TX_BUFFER_SIZE];
+static int16_t uart4_tx_in = 0;
+
+static int8_t  uart4_rx_buffer[UART4_RX_BUFFER_SIZE];
+static int8_t  uart4_rx_it_buffer[UART4_RX_IT_BUFFER_SIZE];
+static int16_t uart4_rx_in = 0;
+static int16_t uart4_rx_out = 0;
+static bool uart4_rx_received = false;
+
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart4;
@@ -64,6 +83,8 @@ void MX_UART4_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN UART4_Init 2 */
+
+  HAL_UARTEx_ReceiveToIdle_IT(&huart4, (uint8_t *)uart4_rx_it_buffer, UART4_RX_IT_BUFFER_SIZE);
 
   /* USER CODE END UART4_Init 2 */
 
@@ -166,6 +187,9 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     GPIO_InitStruct.Alternate = GPIO_AF8_UART4;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+    /* UART4 interrupt Init */
+    HAL_NVIC_SetPriority(UART4_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(UART4_IRQn);
   /* USER CODE BEGIN UART4_MspInit 1 */
 
   /* USER CODE END UART4_MspInit 1 */
@@ -262,6 +286,8 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     */
     HAL_GPIO_DeInit(GPIOA, ARD_D1_Pin|ARD_D0_Pin);
 
+    /* UART4 interrupt Deinit */
+    HAL_NVIC_DisableIRQ(UART4_IRQn);
   /* USER CODE BEGIN UART4_MspDeInit 1 */
 
   /* USER CODE END UART4_MspDeInit 1 */
@@ -339,17 +365,67 @@ int _write(int file, char *ptr, int len)
 }
 #endif
 
-bool MX_UART4_Read(int8_t * ptr, size_t len)
+int16_t MX_UART4_Read(int8_t * ptrBfr)
 {
-  uint16_t rxlen;
-  (void)HAL_UARTEx_ReceiveToIdle(&huart4, (uint8_t *)ptr, (uint16_t)len, &rxlen, 5000);
-  ptr[rxlen] = 0U;
-  return (rxlen > 0);
+  int16_t len = 0;
+
+  if (uart4_rx_received) {
+    if (uart4_rx_in > uart4_rx_out) {
+      len = uart4_rx_in - uart4_rx_out;
+      memcpy(ptrBfr, &uart4_rx_buffer[uart4_rx_out], len);
+    } else {
+      len = UART4_RX_BUFFER_SIZE - (uart4_rx_out - uart4_rx_in);
+      memcpy(&ptrBfr[0], &uart4_rx_buffer[uart4_rx_out], UART4_RX_BUFFER_SIZE - uart4_rx_out);
+      memcpy(&ptrBfr[UART4_RX_BUFFER_SIZE - uart4_rx_out], &uart4_rx_buffer[0], uart4_rx_in);
+    }
+    uart4_rx_out = uart4_rx_in;
+    uart4_rx_received = false;
+  }
+
+  return len;
 }
 
-bool MX_UART4_Write(int8_t *ptr, size_t len)
+bool MX_UART4_Write(const int8_t *ptrBfr, size_t len)
 {
-  return (HAL_OK == HAL_UART_Transmit(&huart4, (uint8_t *)ptr, (uint16_t)len, 10));
+  bool ret = false;
+  if ((len <= UART4_TX_BUFFER_SIZE) && (len > 0)) {
+    if ((uart4_tx_in + len) > UART4_TX_BUFFER_SIZE) {
+      uart4_tx_in = 0;
+    }
+    memcpy(&uart4_tx_buffer[uart4_tx_in], ptrBfr, len);
+    ret = (HAL_OK == HAL_UART_Transmit_IT(&huart4, (uint8_t *)&uart4_tx_buffer[uart4_tx_in], len));
+    uart4_tx_in = USART_INC_IDX(uart4_tx_in, len, UART4_TX_BUFFER_SIZE);
+  }
+
+  return ret;
+}
+
+/**
+  * @brief  Reception Event Callback (Rx event notification called after use of advanced reception service).
+  * @param  huart UART handle
+  * @param  Size  Number of data available in application reception buffer (indicates a position in
+  *               reception buffer until which, data are available)
+  * @retval None
+  */
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+  if (UART4 == huart->Instance) {
+    if ((Size > 0) && (Size <= UART4_RX_IT_BUFFER_SIZE)) {
+      if ((uart4_rx_in + Size) <= UART4_RX_BUFFER_SIZE) {
+        memcpy(&uart4_rx_buffer[uart4_rx_in], &uart4_rx_it_buffer[0], Size);
+      } else {
+        memcpy(&uart4_rx_buffer[uart4_rx_in],
+               &uart4_rx_it_buffer[0],
+               UART4_RX_BUFFER_SIZE - uart4_rx_in);
+        memcpy(&uart4_rx_buffer[0],
+               &uart4_rx_it_buffer[UART4_RX_BUFFER_SIZE - uart4_rx_in],
+               USART_INC_IDX(uart4_rx_in, Size, UART4_RX_BUFFER_SIZE));
+      }
+      uart4_rx_in = USART_INC_IDX(uart4_rx_in, Size, UART4_RX_BUFFER_SIZE);
+      uart4_rx_received = true;
+    }
+    HAL_UARTEx_ReceiveToIdle_IT(&huart4, (uint8_t *)uart4_rx_it_buffer, UART4_RX_IT_BUFFER_SIZE);
+  }
 }
 
 /* USER CODE END 1 */
