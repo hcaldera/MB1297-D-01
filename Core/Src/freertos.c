@@ -38,8 +38,6 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define MAIN_BUFFER_SIZE (1 << 10) /* 1024 */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -49,9 +47,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-
-static int8_t main_buffer[MAIN_BUFFER_SIZE];
-static int16_t main_buffer_in = 0;
 
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
@@ -144,10 +139,6 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
-  int16_t ticksCtr1 = 0;
-  int16_t ticksCtr2 = 0;
-  int16_t len;
-
   MX_UART4_Write((const int8_t *)"Hello World!\n", strlen("Hello World!\n"));
 
   /* Infinite loop */
@@ -173,11 +164,9 @@ void uart4_read_callback(void *argument)
 {
   /* USER CODE BEGIN uart4_read_callback */
 
-  uint16_t len;
+  int8_t main_buffer[256];
 
-  len = MX_UART4_Read(&main_buffer[main_buffer_in]);
-  (void)MX_UART4_Write(&main_buffer[main_buffer_in], len);
-  main_buffer_in = (main_buffer_in + len) & (MAIN_BUFFER_SIZE - 1);
+  (void)MX_UART4_Write(main_buffer, MX_UART4_Read(main_buffer));
 
   /* USER CODE END uart4_read_callback */
 }
